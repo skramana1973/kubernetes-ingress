@@ -1,0 +1,88 @@
+def createRefColumn(dataframe: DataFrame,fileSystem: FileSystem): DataFrame = {
+
+
+  var existingRefColumn: List[String] = null
+  var existingRefValue: List[String] = null
+  var refDF: DataFrame = null
+  val hdfsPath = "hdfs://localhost:9000/output001.json"
+  if (fileSystem.exists(new Path(hdfsPath))) {
+    refDF = spark.read.json(hdfsPath)
+    println("Existing DF !!!!!")
+    refDF.show(false)
+    existingRefColumn = refDF.columns.toList
+    existingRefValue = refDF.collect.map(_.toSeq).flatten.toList.asInstanceOf[List[String]]
+    // val res = refDF.collect.map(_.toSeq).flatten
+
+  }
+  val jsonObj =  new JsonObject()
+  val columns = dataframe.columns;
+  var df2 = dataframe
+
+  var nums: List[String] = List()
+  for (i <- 0 to columns.length - 1) {
+    if (nums.contains(columns(i).toLowerCase())) {
+      val originalCol = columns(i)
+      var colName = columns(i).toLowerCase() + i
+     // df2 = df2.withColumnRenamed(originalCol, colName)
+     // nums = nums :+ colName
+      if(fileSystem.exists(new Path(hdfsPath))) {
+        if(!existingRefColumn.contains(originalCol)) {
+
+          if(existingRefValue.contains(colName)){
+            colName = colName+i
+            jsonObj.addProperty(originalCol,colName )
+          }else{
+            jsonObj.addProperty(originalCol,colName )
+          }
+        }
+      }else{
+        jsonObj.addProperty(originalCol,colName )
+      }
+      df2 = df2.withColumnRenamed(originalCol, colName)
+      nums = nums :+ colName
+    } else {
+      val originalCol = columns(i)
+      var colName = columns(i).toLowerCase()
+
+      if(fileSystem.exists(new Path(hdfsPath))) {
+        if(!existingRefColumn.contains(originalCol)) {
+          if(existingRefValue.contains(colName)){
+            colName = colName+i
+            jsonObj.addProperty(originalCol,colName )
+          }else{
+            jsonObj.addProperty(originalCol,colName )
+          }
+        }
+      }else{
+        jsonObj.addProperty(originalCol,colName )
+      }
+      df2 = df2.withColumnRenamed(originalCol,colName )
+      nums = nums :+ colName
+    }
+  }
+
+  if(!jsonObj.entrySet().isEmpty) {
+
+    var fileOutputStream: FSDataOutputStream = null;
+    try {
+      if (fileSystem.exists(new Path(hdfsPath))) {
+       // val refdf = spark.read.json(Seq(jsonObj.toString).toDS())
+       // refdf.show(false)
+        //val mergeDF = refDF.crossJoin(refdf)
+        fileOutputStream = fileSystem.append(new Path(hdfsPath));
+        fileOutputStream.writeBytes(jsonObj.toString+"\n");
+      } else {
+        fileOutputStream = fileSystem.create(new Path(hdfsPath));
+        fileOutputStream.writeBytes(jsonObj.toString +"\n");
+      }
+    } finally {
+      if (fileSystem != null) {
+        fileSystem.close();
+      }
+      if (fileOutputStream != null) {
+        fileOutputStream.close();
+      }
+    }
+  }
+  df2
+}
